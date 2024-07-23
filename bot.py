@@ -134,7 +134,7 @@ def start_message(message):
     keyboard.add(join_chat_btn)
     
     # Кнопка "📰 Новости"
-    news_btn = types.InlineKeyboardButton('📰 Новости', url='https://t.me/IDMafiaNews')
+    news_btn = types.InlineKeyboardButton('📰 Новости', url='https://t.me/RealMafiaNews')
     keyboard.add(news_btn)
 
     # Формируем ссылку для добавления бота в группу
@@ -148,13 +148,14 @@ def start_message(message):
     # Отправляем сообщение с приветствием и клавиатурой
     bot.send_message(chat_id, 'Привет!\nЯ ведущий бот по игре мафия🤵🏻. Начнем играть?', reply_markup=keyboard)
 
+    else:
+        bot.send_message(message.chat.id, "Команда /start доступна только в приватном чате с ботом.")
+
 @bot.callback_query_handler(func=lambda call: call.data == 'join_chat')
 def join_chat_callback(call):
     chat_id = call.message.chat.id
     message_id = call.message.message_id
 
-    # Удаляем кнопку "🎲 Войти в чат"
-    bot.edit_message_reply_markup(chat_id=chat_id, message_id=message_id, reply_markup=None)
 
     # Создаем клавиатуру для кнопки "🛠️ Тестовый"
     test_button = types.InlineKeyboardMarkup()
@@ -273,6 +274,20 @@ def leave_game(message):
 
     # Удаление сообщения пользователя из общего чата
     bot.delete_message(chat_id, message.message_id)
+    
+
+@bot.message_handler(commands=['game', 'start_game', 'leave'])
+def game_commands(message):
+    if message.chat.type == "private":
+        bot.send_message(message.chat.id, "Эти команды доступны только в общем чате.")
+    else:
+        # Обработка команд в общем чате
+        if message.text.startswith('/game'):
+            create_game(message)
+        elif message.text.startswith('/start_game'):
+            start_game(message)
+        elif message.text.startswith('/leave'):
+            leave_game(message)
 
 bot_username = "@nrlv_bot"
 
@@ -281,6 +296,8 @@ async def game_cycle(chat_id):
     global chat_list, is_night
     chat = chat_list[chat_id]
     game_start_time = time.time()
+    
+    day_count = 1  # Инициализация счётчика дней
 
     while chat.game_running:
         await asyncio.sleep(5)
@@ -294,7 +311,7 @@ async def game_cycle(chat_id):
         keyboard_night.add(button)
 
         # Отправляем сообщение с кнопкой и списком живых игроков
-        bot.send_animation(chat_id, 'https://t.me/Hjoxbednxi/4', caption='🌃 Наступает ночь\nНа улицы города выходят лишь самые отважные и бесстрашные.\nУтром попробуем сосчитать их головы...', parse_mode="Markdown", reply_markup=keyboard_night)
+        bot.send_animation(chat_id, 'https://t.me/Hjoxbednxi/13', caption='🌃 Наступает ночь\nНа улицы города выходят лишь самые отважные и бесстрашные.\nУтром попробуем сосчитать их головы...', parse_mode="Markdown", reply_markup=keyboard_night)
         msg = bot.send_message(chat_id=chat_id, text=players_alive_text, parse_mode="Markdown", reply_markup=keyboard_night)
         chat.button_id = msg.message_id
 
@@ -314,7 +331,6 @@ async def game_cycle(chat_id):
 
         is_night = False
 
-
         to_remove = []
         for player_id, player in chat.players.items():
             if player['role'] != '👱‍♂️ Мирный житель' and not player.get('action_taken', False):
@@ -324,12 +340,12 @@ async def game_cycle(chat_id):
             else:
                 player['action_taken'] = False
 
-        bot.send_animation(chat_id, 'https://t.me/Hjoxbednxi/5', caption='🏙 День\nСолнце всходит,\nподсушивая на тротуарах пролитую ночью кровь...', parse_mode="Markdown")
+        bot.send_animation(chat_id, 'https://t.me/Hjoxbednxi/14', caption=f'🏙 День {day_count}\nСолнце всходит,\nподсушивая на тротуарах пролитую ночью кровь...', parse_mode="Markdown")
 
         if chat.dead:
             dead_id, dead = chat.dead
             if chat.doc_target and chat.doc_target == dead_id:
-                bot.send_message(chat_id, f'👨‍⚕️ Доктор кого-то спас', parse_mode="Markdown")
+                bot.send_message(chat_id, '👨‍⚕️ Доктор кого-то спас', parse_mode="Markdown")
             else:
                 bot.send_message(chat_id, f'Сегодня жестоко убит {dead["name"]}...\nГоворят, у него в гостях был 🤵🏻 Мафия', parse_mode="Markdown")
                 chat.remove_player(dead_id)
@@ -343,7 +359,7 @@ async def game_cycle(chat_id):
         chat.sheriff_check = None
 
         await asyncio.sleep(40)
-        
+
         # Обновляем голосование
         bot.send_message(chat_id, '🌅 Пришло время голосования!\nВыберите игрока, которого хотите изгнать.',
                          reply_markup=types.InlineKeyboardMarkup([
@@ -392,13 +408,23 @@ async def game_cycle(chat_id):
             minutes = int(game_duration // 60)
             seconds = int(game_duration % 60)
 
-            result_text = f"Игра окончена!\nПобедила Мафия\n\nПобедители:\n{', '.join(winners)}\n\nОстальные участники:\n{', '.join(losers)}\n\nИгра длилась: {minutes} мин. {seconds} сек."
+            result_text = f"Игра окончена!\nПобедила {'Мафия' if mafia_count > 0 else 'Мирные жители'}\n\nПобедители:\n{', '.join(winners) if winners else 'Нет победителей'}\n\nОстальные участники:\n{', '.join(losers) if losers else 'Нет проигравших'}\n\nИгра длилась: {minutes} мин. {seconds} сек."
 
+            # Отправляем сообщение о завершении игры в общий чат
             bot.send_message(chat_id, result_text)
+
+            # Отправляем сообщение "Игра окончена!" всем участникам в приватных чатах
+            for player_id in chat.players:
+                try:
+                    bot.send_message(player_id, "Игра окончена!\n\nПодпишитесь на наш новостной канал,\nгде вы там можете узнавать игровые обновление!\n\n@RealMafiaNrws")
+                except Exception as e:
+                    logging.error(f"Не удалось отправить сообщение игроку {player_id}: {e}")
 
             # Убедитесь, что игра может быть запущена снова
             chat_list[chat_id] = Game()
             break
+
+        day_count += 1  # Увеличиваем счётчик дней
         
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('join_'))
@@ -477,24 +503,30 @@ def handle_message(message):
     global is_night
     chat_id = message.chat.id
     user_id = message.from_user.id
-    
-    # Проверяем, является ли сообщение общим чатом
+
     if message.chat.type != "private":
         chat = chat_list.get(chat_id)
         if chat:
-            # Удаление всех сообщений ночью
-            if is_night:
-                bot.delete_message(chat_id, message.message_id)
-            else:
-                # Проверка, зарегистрирован ли пользователь в игре
-                if user_id in chat.players:
-                    # Разрешаем писать только живым игрокам
-                    if chat.players[user_id]['role'] != 'dead':
+            if chat.game_running:  # Проверка, что игра идет
+                # Проверяем, является ли пользователь администратором
+                chat_member = bot.get_chat_member(chat_id, user_id)
+                is_admin = chat_member.status in ['administrator', 'creator']
+
+                if is_night:
+                    if message.text.startswith('!') or is_admin:
+                        # Если сообщение начинается с ! или пользователь администратор, не удаляем сообщение
                         return
-                # Удаляем сообщения от мертвых и незарегистрированных игроков
-                bot.delete_message(chat_id, message.message_id)
+                    else:
+                        bot.delete_message(chat_id, message.message_id)
+                else:
+                    if user_id in chat.players:
+                        if chat.players[user_id]['role'] != 'dead':
+                            return
+                    bot.delete_message(chat_id, message.message_id)
+            else:
+                # Разрешить сообщения, если игра не идет
+                return
         else:
-            # Удаляем сообщения от незарегистрированных игроков, если игры нет в чате
             bot.delete_message(chat_id, message.message_id)
 
 bot.infinity_polling()
