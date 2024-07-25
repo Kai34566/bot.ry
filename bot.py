@@ -20,13 +20,15 @@ class Game:
         self.players = {}
         self.dead = None
         self.sheriff_check = None
-        self.doc_target = None  # Новый атрибут для хранения цели доктора
+        self.doc_target = None
         self.vote_counts = {}
         self.game_running = False
         self.button_id = None
         self.dList_id = None
         self.shList_id = None
-        self.docList_id = None  # Новый атрибут для сообщения доктора
+        self.docList_id = None
+        self.mafia_votes = {}  # Добавляем атрибут для хранения голосов мафии
+        self.mafia_voting_message_id = None  # ID сообщения для мафии
         
     def update_player_list(self):
         players_list = ", ".join([player['name'] for player in self.players.values()])
@@ -105,8 +107,18 @@ def voice_handler(chat_id):
         dead = players.pop(dead_id)
         return dead
 
+def send_message_to_mafia(chat, message):
+    for player_id, player in chat.players.items():
+        if player['role'] == '🤵🏻 Мафия':
+            bot.send_message(player_id, message)
+
+
 @bot.message_handler(commands=['start'])
 def start_message(message):
+    # Проверяем, что команда пришла из приватного чата
+    if message.chat.type != 'private':
+        return
+
     user_id = message.from_user.id
     chat_id = message.chat.id
     text = message.text
@@ -147,10 +159,7 @@ def start_message(message):
 
     # Отправляем сообщение с приветствием и клавиатурой
     bot.send_message(chat_id, 'Привет!\nЯ ведущий бот по игре мафия🤵🏻. Начнем играть?', reply_markup=keyboard)
-
-    else:
-        bot.send_message(message.chat.id, "Команда /start доступна только в приватном чате с ботом.")
-
+    
 @bot.callback_query_handler(func=lambda call: call.data == 'join_chat')
 def join_chat_callback(call):
     chat_id = call.message.chat.id
@@ -217,19 +226,20 @@ def start_game(message):
     players_list = list(chat.players.items())
     shuffle(players_list)
 
-    # Удаляем сообщение о регистрации
-    if chat.button_id:
-        bot.delete_message(chat_id, chat.button_id)
-        chat.button_id = None
+    # Определяем количество мафий
+    num_players = len(players_list)
+    num_mafias = num_players // 3
 
-    # Назначение ролей
-    change_role(players_list[0][0], chat.players, '🤵🏻 Мафия', 'Ты - 🤵🏻мафия! Твоя задача убрать всех мирных жителей.')
+    # Назначаем мафий
+    for i in range(num_mafias):
+        change_role(players_list[i][0], chat.players, '🤵🏻 Мафия', 'Ты - 🤵🏻мафия! Твоя задача убрать всех мирных жителей.')
 
+    # Назначаем роли шерифа и доктора
     if len(players_list) >= 6:
-        change_role(players_list[1][0], chat.players, '🕵️‍♂️ Шериф', 'Ты - 🕵🏼️‍♂️шериф! Твоя задача вычислить мафию и спасти город.')
-        start_index = 2
+        change_role(players_list[num_mafias][0], chat.players, '🕵️‍♂️ Шериф', 'Ты - 🕵🏼️‍♂️шериф! Твоя задача вычислить мафию и спасти город.')
+        start_index = num_mafias + 1
     else:
-        start_index = 1
+        start_index = num_mafias
 
     doctor_assigned = False
     for i in range(start_index, len(players_list)):
@@ -276,19 +286,6 @@ def leave_game(message):
     bot.delete_message(chat_id, message.message_id)
     
 
-@bot.message_handler(commands=['game', 'start_game', 'leave'])
-def game_commands(message):
-    if message.chat.type == "private":
-        bot.send_message(message.chat.id, "Эти команды доступны только в общем чате.")
-    else:
-        # Обработка команд в общем чате
-        if message.text.startswith('/game'):
-            create_game(message)
-        elif message.text.startswith('/start_game'):
-            start_game(message)
-        elif message.text.startswith('/leave'):
-            leave_game(message)
-
 bot_username = "@nrlv_bot"
 
 # Обновленный код для функции game_cycle
@@ -305,31 +302,53 @@ async def game_cycle(chat_id):
         is_night = True
         players_alive_text = players_alive(chat.players, "night")
 
-        # Создаем клавиатуру с кнопкой "Перейти к боту"
-        keyboard_night = types.InlineKeyboardMarkup()
-        button = types.InlineKeyboardButton('Перейти к боту', url=f'https://t.me/{bot.get_me().username}')
-        keyboard_night.add(button)
-
-        # Отправляем сообщение с кнопкой и списком живых игроков
-        bot.send_animation(chat_id, 'https://t.me/Hjoxbednxi/13', caption='🌃 Наступает ночь\nНа улицы города выходят лишь самые отважные и бесстрашные.\nУтром попробуем сосчитать их головы...', parse_mode="Markdown", reply_markup=keyboard_night)
-        msg = bot.send_message(chat_id=chat_id, text=players_alive_text, parse_mode="Markdown", reply_markup=keyboard_night)
+        # Отправляем сообщение о ночи
+        bot.send_animation(chat_id, 'https://t.me/Hjoxbednxi/13', caption='🌃 Наступает ночь\nНа улицы города выходят лишь самые отважные и бесстрашные.\nУтром попробуем сосчитать их головы...', parse_mode="Markdown")
+        msg = bot.send_message(chat_id=chat_id, text=players_alive_text, parse_mode="Markdown")
         chat.button_id = msg.message_id
 
-        chat.dead = None
-        chat.sheriff_check = None
-        chat.doc_target = None
+        # Отправляем состав мафии мафиям
+        mafia_list = [f"{player['name']}" for player in chat.players.values() if player['role'] == '🤵🏻 Мафия']
+        send_message_to_mafia(chat, f"Состав мафии:\n" + "\n".join(mafia_list))
 
+        # Обработка ночных действий
         for player_id, player in chat.players.items():
             if player['role'] == '🤵🏻 Мафия':
                 chat.dList_id = list_btn(chat.players, player_id, 'мафия', 'Кого будем устранять?')
+                chat.mafia_voting_message_id = chat.dList_id  # Сохраняем ID сообщения для мафии
             elif player['role'] == '🕵️‍♂️ Шериф':
                 chat.shList_id = list_btn(chat.players, player_id, 'шериф', 'Кого будем проверять?')
             elif player['role'] == '👨‍⚕️ Доктор':
                 chat.docList_id = list_btn(chat.players, player_id, 'доктор', 'Кого будем лечить?')
 
-        await asyncio.sleep(30)
+        await asyncio.sleep(30)  # Даем время на голосование
 
         is_night = False
+
+        # Определяем жертву мафии
+        if chat.mafia_votes:
+            # Подсчёт голосов мафии
+            vote_counts = {}
+            for victim_id in chat.mafia_votes.values():
+                if victim_id in vote_counts:
+                    vote_counts[victim_id] += 1
+                else:
+                    vote_counts[victim_id] = 1
+
+            # Определяем жертву по максимальному количеству голосов
+            mafia_victim = max(vote_counts, key=vote_counts.get, default=None)
+
+            if mafia_victim and mafia_victim in chat.players:
+                chat.dead = (mafia_victim, chat.players[mafia_victim])
+                send_message_to_mafia(chat, f"Мафия выбрала жертву: {chat.players[mafia_victim]['name']}")
+                bot.send_message(chat_id, "🤵🏻 Мафия выбрала жертву...")
+            else:
+                send_message_to_mafia(chat, "Ошибка: выбранная мафией жертва не найдена среди игроков.")
+        else:
+            bot.send_message(chat_id, "🤵🏻 Мафия не выбрала жертву...")
+
+        # Очищаем голосование мафии
+        chat.mafia_votes.clear()
 
         to_remove = []
         for player_id, player in chat.players.items():
@@ -347,7 +366,7 @@ async def game_cycle(chat_id):
             if chat.doc_target and chat.doc_target == dead_id:
                 bot.send_message(chat_id, '👨‍⚕️ Доктор кого-то спас', parse_mode="Markdown")
             else:
-                bot.send_message(chat_id, f'Сегодня жестоко убит {dead["name"]}...\nГоворят, у него в гостях был 🤵🏻 Мафия', parse_mode="Markdown")
+                bot.send_message(chat_id, f'Сегодня жестоко убит {dead["role"]} {dead["name"]}...\nГоворят, у него в гостях был 🤵🏻 Мафия', parse_mode="Markdown")
                 chat.remove_player(dead_id)
                 players_list_text = chat.update_player_list()
 
@@ -467,10 +486,23 @@ def callback_handler(call):
         player_role = chat.players[from_id]['role']
 
         if player_role == '🤵🏻 Мафия' and action == 'м':  # Мафия выбирает жертву
-            chat.dead = (target_id, chat.players[target_id])
-            bot.send_message(chat_id, "🤵🏻 Мафия выбрала жертву...")
-            bot.send_message(from_id, f"Вы выбрали убить {chat.players[target_id]['name']}")
-            bot.delete_message(from_id, call.message.message_id)
+            if target_id not in chat.players or chat.players[target_id]['role'] == 'dead':
+                bot.answer_callback_query(call.id, "Цель недоступна.")
+                return
+
+            # Проверка и обновление голосов мафии
+            if from_id not in chat.mafia_votes:
+                chat.mafia_votes[from_id] = target_id
+                victim_name = chat.players[target_id]['name']
+                voter_name = chat.players[from_id]['name']
+                
+                # Уведомляем всех мафиози о голосе
+                send_message_to_mafia(chat, f"Мафия {voter_name} проголосовал(а) за {victim_name} как жертву")
+                
+                bot.answer_callback_query(call.id, f"Вы проголосовали за {victim_name}")
+                bot.delete_message(from_id, call.message.message_id)  # Удаляем сообщение с выбором
+            else:
+                bot.answer_callback_query(call.id, "Вы уже проголосовали.")
 
         elif player_role == '🕵️‍♂️ Шериф' and action == 'ш':  # Шериф проверяет игрока
             chat.sheriff_check = target_id
@@ -496,7 +528,7 @@ def callback_handler(call):
                 bot.delete_message(from_id, call.message.message_id)
 
     except Exception as e:
-        logging.error(f"Ошибка при обработке callback: {e}")
+        logging.error(f"Ошибка в callback_handler: {e}")
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
