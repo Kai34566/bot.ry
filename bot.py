@@ -4,6 +4,7 @@ from random import shuffle
 import asyncio
 import logging
 import time
+import threading
 
 logging.basicConfig(level=logging.INFO)
 
@@ -112,6 +113,26 @@ def send_message_to_mafia(chat, message):
         if player['role'] == '🤵🏻 Мафия':
             bot.send_message(player_id, message)
 
+def notify_mafia(chat, mafia_name, message, sender_id):
+    for player_id, player in chat.players.items():
+        if player['role'] == '🤵🏻 Мафия' and player_id != sender_id and player['status'] == 'alive':
+            bot.send_message(player_id, f"🤵🏻 Мафия {mafia_name}:\n{message}")
+
+def notify_one_minute_left(chat_id):
+    if chat_id in chat_list:
+        chat = chat_list[chat_id]
+        if not chat.game_running and chat.button_id:
+            join_btn = types.InlineKeyboardMarkup()
+            bot_username = bot.get_me().username
+            join_url = f'https://t.me/{bot_username}?start=join_{chat_id}'
+            item1 = types.InlineKeyboardButton('Присоединиться к игре', url=join_url)
+            join_btn.add(item1)
+            bot.send_message(chat_id, 'До конца регистрации осталось 59 сек.', reply_markup=join_btn)
+
+def start_game_with_delay(chat_id):
+    if chat_id in chat_list:
+        _start_game(chat_id)
+
 
 @bot.message_handler(commands=['start'])
 def start_message(message):
@@ -201,9 +222,16 @@ def create_game(message):
     # Удаляем сообщение с командой /game
     bot.delete_message(chat_id, message.message_id)
 
+    # Запускаем таймер на 1 минуту для уведомления и на 2 минуты для начала игры
+    threading.Timer(60.0, lambda: notify_one_minute_left(chat_id)).start()
+    threading.Timer(120.0, lambda: start_game_with_delay(chat_id)).start()
+
 @bot.message_handler(commands=['start_game'])
 def start_game(message):
     chat_id = message.chat.id
+    _start_game(chat_id)
+
+def _start_game(chat_id):
     if chat_id not in chat_list:
         bot.send_message(chat_id, 'Сначала создайте игру с помощью команды /game.')
         return
@@ -237,7 +265,7 @@ def start_game(message):
     # Назначаем роли шерифа и доктора
     if len(players_list) >= 6:
         change_role(players_list[num_mafias][0], chat.players, '🕵️‍♂️ Шериф', 'Ты - 🕵🏼️‍♂️шериф! Твоя задача вычислить мафию и спасти город.')
-        start_index = num_mafias + 1
+        start_index = num_maфias + 1
     else:
         start_index = num_mafias
 
@@ -250,9 +278,6 @@ def start_game(message):
             change_role(players_list[i][0], chat.players, '👱‍♂️ Мирный житель', 'Ты - 👨🏼мирный житель! Твоя задача найти мафию и защитить город.')
 
     asyncio.run(game_cycle(chat_id))
-
-    # Удаляем сообщение с командой /start_game
-    bot.delete_message(chat_id, message.message_id)
 
 @bot.message_handler(commands=['leave'])
 def leave_game(message):
@@ -308,8 +333,8 @@ async def game_cycle(chat_id):
         chat.button_id = msg.message_id
 
         # Отправляем состав мафии мафиям
-        mafia_list = [f"{player['name']}" for player in chat.players.values() if player['role'] == '🤵🏻 Мафия']
-        send_message_to_mafia(chat, f"Состав мафии:\n" + "\n".join(mafia_list))
+        mafia_list = [f"🤵🏻 Мафия - {player['name']}" for player in chat.players.values() if player['role'] == '🤵🏻 Мафия']
+        send_message_to_mafia(chat, f"Запоминай своих союзников:\n" + "\n".join(mafia_list))
 
         # Обработка ночных действий
         for player_id, player in chat.players.items():
@@ -529,6 +554,16 @@ def callback_handler(call):
 
     except Exception as e:
         logging.error(f"Ошибка в callback_handler: {e}")
+
+@bot.message_handler(func=lambda message: message.chat.type == 'private')
+def handle_private_message(message):
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    chat = next((chat for chat in chat_list.values() if user_id in chat.players), None)
+    
+    if chat and chat.players[user_id]['role'] == '🤵🏻 Мафия' and chat.players[user_id]['status'] == 'alive' and is_night:
+        mafia_name = chat.players[user_id]['name']
+        notify_mafia(chat, mafia_name, message.text, user_id)
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
