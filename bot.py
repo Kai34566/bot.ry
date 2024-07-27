@@ -373,16 +373,16 @@ async def game_cycle(chat_id):
         bot.send_animation(chat_id, 'https://t.me/Hjoxbednxi/14', caption=f'🏙 День {day_count}\nСолнце всходит,\nподсушивая на тротуарах пролитую ночью кровь...', parse_mode="Markdown")
 
         if chat.dead:
-    dead_id, dead = chat.dead
-    if chat.doc_target and chat.doc_target == dead_id:
-        bot.send_message(chat_id, '👨‍⚕️ Доктор кого-то спас', parse_mode="Markdown")
-    else:
-        bot.send_message(chat_id, f'Сегодня жестоко убит {dead["role"]} {dead["name"]}...\nГоворят, у него в гостях был 🤵🏻 Мафия', parse_mode="Markdown")
-        chat.remove_player(dead_id)
-        dead_players.append(dead)  # Добавляем игрока в список умерших
-        players_list_text = chat.update_player_list()
-else:
-    bot.send_message(chat_id, '🌞 Удивительно! Но сегодня никто не умер.', parse_mode="Markdown")
+            dead_id, dead = chat.dead
+            if chat.doc_target and chat.doc_target == dead_id:
+                bot.send_message(chat_id, '👨‍⚕️ Доктор кого-то спас', parse_mode="Markdown")
+            else:
+                bot.send_message(chat_id, f'Сегодня жестоко убит {dead["role"]} {dead["name"]}...\nГоворят, у него в гостях был 🤵🏻 Мафия', parse_mode="Markdown")
+                chat.remove_player(dead_id)
+                dead_players.append(dead)  # Добавляем игрока в список умерших
+                players_list_text = chat.update_player_list()
+        else:
+            bot.send_message(chat_id, '🌞 Удивительно!\nНо сегодня никто не умер.', parse_mode="Markdown")
 
         players_alive_text = players_alive(chat.players, "day")
         msg = bot.send_message(chat_id=chat_id, text=players_alive_text, parse_mode="Markdown")
@@ -448,11 +448,12 @@ else:
             # Отправляем сообщение о завершении игры в общий чат
             bot.send_message(chat_id, result_text)
 
-           for player_id in chat.players:
+            for player_id in chat.players:
                 try:
                     bot.send_message(player_id, "Игра окончена!\n\nПодпишитесь на наш новостной канал,\nгде вы там можете узнавать игровые обновление!\n\n@RealMafiaNrws")
                 except Exception as e:
                     logging.error(f"Не удалось отправить сообщение игроку {player_id}: {e}")
+
 
             # Убедитесь, что игра может быть запущена снова
             chat_list[chat_id] = Game()
@@ -501,17 +502,17 @@ def callback_handler(call):
         player_role = chat.players[from_id]['role']
 
         if player_role == '🤵🏻 Мафия' and action == 'м':  # Мафия выбирает жертву
-    if target_id not in chat.players or chat.players[target_id]['role'] == 'dead':
-        bot.answer_callback_query(call.id, "Цель недоступна.")
-        return
+            if target_id not in chat.players or chat.players[target_id]['role'] == 'dead':
+                bot.answer_callback_query(call.id, "Цель недоступна.")
+                return
 
-    # Проверка и обновление голосов мафии
-    if from_id not in chat.mafia_votes:
-        chat.mafia_votes[from_id] = target_id
-        victim_name = chat.players[target_id]['name']
-        voter_name = chat.players[from_id]['name']
+            # Проверка и обновление голосов мафии
+            if from_id not in chat.mafia_votes:
+                chat.mafia_votes[from_id] = target_id
+                victim_name = chat.players[target_id]['name']
+                voter_name = chat.players[from_id]['name']
 
-        # Уведомляем всех мафиози о голосе...
+                # Уведомляем всех мафиози о голосе
                 send_message_to_mafia(chat, f"Мафия {voter_name} проголосовал(а) за {victim_name} как жертву")
                 
                 bot.answer_callback_query(call.id, f"Вы проголосовали за {victim_name}")
