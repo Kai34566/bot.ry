@@ -1079,7 +1079,7 @@ def _start_game(chat_id):
     shuffle(players_list)
 
     num_players = len(players_list)
-    num_mafias = max(1, (num_players // 2))  # Минимум одна мафия
+    num_mafias = max(1, (num_players // 3))  # Минимум одна мафия
     mafia_assigned = 0
 
     # Установим статус alive для всех игроков перед началом игр
@@ -1102,48 +1102,48 @@ def _start_game(chat_id):
     roles_assigned = mafia_assigned + 1  # Учитывая Дона
 
     # Назначение доктора при 4 и более игроках
-    if roles_assigned < num_players and num_players >= 9:
+    if roles_assigned < num_players and num_players >= 4:
         logging.info(f"Назначение Доктора: {players_list[roles_assigned][1]['name']}")
         change_role(players_list[roles_assigned][0], chat.players, '👨🏼‍⚕️ Доктор', 'Ты — 👨🏼‍⚕️ Доктор!\n\nТвоя задача спасать жителей от рук мафии.', chat)
         roles_assigned += 1
 
     # Назначение Самоубийцы при 4 и более игроках
-    if roles_assigned < num_players and num_players >= 10:
+    if roles_assigned < num_players and num_players >= 30:
         logging.info(f"Назначение Самоубийцы: {players_list[roles_assigned][1]['name']}")
         change_role(players_list[roles_assigned][0], chat.players, '🤦‍♂️ Самоубийца', 'Ты — 🤦‍♂️ Самоубийца!\n\nТвоя задача - быть повешенным, чтобы победить.', chat)
         chat.suicide_bomber_id = players_list[roles_assigned][0]
         roles_assigned += 1
 
     # Назначение бомжа при 5 и более игроках
-    if roles_assigned < num_players and num_players >= 9:
+    if roles_assigned < num_players and num_players >= 5:
         logging.info(f"Назначение Бомжа: {players_list[roles_assigned][1]['name']}")
         change_role(players_list[roles_assigned][0], chat.players, '🧙‍♂️ Бомж', 'Ты — 🧙‍♂️ Бомж!\n\nТы можешь проверить, кто ночью заходил к выбранному игроку.', chat)
         chat.hobo_id = players_list[roles_assigned][0]
         roles_assigned += 1
 
     # Назначение шерифа при 6 и более игроках
-    if roles_assigned < num_players and num_players >= 4:
+    if roles_assigned < num_players and num_players >= 6:
         logging.info(f"Назначение Шерифа: {players_list[roles_assigned][1]['name']}")
         change_role(players_list[roles_assigned][0], chat.players, '🕵️‍♂️ Шериф', 'Ты — 🕵️‍♂️ Шериф!\n\nТвоя задача вычислить мафию и спасти город.', chat)
         chat.sheriff_id = players_list[roles_assigned][0]
         roles_assigned += 1
 
     # Назначение счастливчика при 7 и более игроках
-    if roles_assigned < num_players and num_players >= 9:
+    if roles_assigned < num_players and num_players >= 8:
         logging.info(f"Назначение Счастливчика: {players_list[roles_assigned][1]['name']}")
         change_role(players_list[roles_assigned][0], chat.players, '🤞 Счастливчик', 'Ты — 🤞 Счастливчик!\n\nУ тебя есть 50% шанс выжить, если тебя попытаются убить.', chat)
         chat.lucky_id = players_list[roles_assigned][0]
         roles_assigned += 1
 
     # Назначение смертника при 12 и более игроках
-    if roles_assigned < num_players and num_players >= 9:
+    if roles_assigned < num_players and num_players >= 12:
         logging.info(f"Назначение Смертника: {players_list[roles_assigned][1]['name']}")
         change_role(players_list[roles_assigned][0], chat.players, '💣 Смертник', 'Ты — 💣 Смертник!\n\nЕсли тебя убьют ночью, ты заберешь своего убийцу с собой.', chat)
         chat.suicide_bomber_id = players_list[roles_assigned][0]
         roles_assigned += 1
 
     # Назначение Любовницы
-    if roles_assigned < num_players and num_players >= 9:
+    if roles_assigned < num_players and num_players >= 7:
         logging.info(f"Назначение Любовницы: {players_list[roles_assigned][1]['name']}")
         change_role(players_list[roles_assigned][0], chat.players, '💃🏼 Любовница', 'Ты — 💃 Любовница!\n\nТы можешь соблазнить одного игрока и блокировать его действия на одну ночь.', chat)
         chat.lover_id = players_list[roles_assigned][0]
@@ -1154,14 +1154,14 @@ def _start_game(chat_id):
         change_role(players_list[roles_assigned][0], chat.players, '👨🏼‍💼 Адвокат', 'Ты — 👨🏼‍💼 Адвокат!\n\nТвоя задача защищать клиента и обеспечивать его безопасность.', chat)
         roles_assigned += 1
 
-    if roles_assigned < num_players and num_players >= 9:  # Сержант назначается, если игроков 5 и более
+    if roles_assigned < num_players and num_players >= 13:  # Сержант назначается, если игроков 5 и более
         logging.info(f"Назначение Сержанта: {players_list[roles_assigned][1]['name']}")
         change_role(players_list[roles_assigned][0], chat.players, '👮🏼 Сержант', 'Ты — 👮🏼 Сержант! Ты унаследуешь роль шерифа, если он погибнет.', chat)
         chat.sergeant_id = players_list[roles_assigned][0]
         roles_assigned += 1
 
     # Назначение маньяка при 6 и более игроках
-    if roles_assigned < num_players and num_players >= 17:
+    if roles_assigned < num_players and num_players >= 16:
         logging.info(f"Назначение Маньяка: {players_list[roles_assigned][1]['name']}")
         change_role(players_list[roles_assigned][0], chat.players, '🔪 Маньяк', 'Ты — 🔪 Маньяк!\n\nТвоя задача убивать одного игрока каждую ночь.', chat)
         chat.maniac_id = players_list[roles_assigned][0]
